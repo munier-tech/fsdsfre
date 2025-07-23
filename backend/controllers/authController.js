@@ -1,7 +1,7 @@
 import cloudinary from "../lib/cloudinary.js";
 import bcrypt from "bcryptjs";
 import { generateTokens, setCookies } from "../helpers/authentication.js";
-import User from "../models/userModel.js";
+import { User } from "../models/index.js";
 
 export const SignUp = async (req, res) => {
   try {
@@ -11,7 +11,7 @@ export const SignUp = async (req, res) => {
       return res.status(400).json({ message: "Fadlan buuxi dhammaan meelaha looga baahan yahay" });
     }
 
-    const existingUser = await User.findOne({ email }).select("-password");
+    const existingUser = await User.findOne({ where: { email } });
 
     if (existingUser) {
       return res.status(400).json({ message: "Isticmaale horey ayuu u diiwaangashanaa" });
@@ -24,23 +24,37 @@ export const SignUp = async (req, res) => {
       cloudinaryResponse = uploadResponse.secure_url;
     }
 
-    const newUser = new User({
+    const newUser = await User.create({
       username,
       password,
       email,
       role,
-      profilePicture: cloudinaryResponse?.secure_url ? cloudinaryResponse?.secure_url : "lama keenin sawir",
+      profilePicture: cloudinaryResponse || "lama keenin sawir",
     });
 
-    const { accessToken } = generateTokens(newUser._id);
+    const { accessToken } = generateTokens(newUser.id);
     setCookies(res, accessToken);
-    newUser.accessToken = accessToken;
 
-    await newUser.save();
+    // Remove password from response
+    const userResponse = {
+      id: newUser.id,
+      username: newUser.username,
+      email: newUser.email,
+      role: newUser.role,
+      profilePicture: newUser.profilePicture,
+      createdAt: newUser.createdAt,
+      updatedAt: newUser.updatedAt
+    };
 
-    res.status(201).json({ message: "Isticmaalaha si guul leh ayaa loo abuuray", newUser });
+    res.status(201).json({ message: "Isticmaalaha si guul leh ayaa loo abuuray", newUser: userResponse });
   } catch (error) {
     console.error("Error in SignUp function: ", error);
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({ message: "Isticmaale magacan leh hore ayuu u diiwaangashanaa" });
+    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -53,23 +67,23 @@ export const SignIn = async (req, res) => {
       return res.status(400).json({ message: "Fadlan geli iimaylka iyo furaha sirta ah" });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ where: { email } });
 
     if (!user) {
       return res.status(400).json({ message: "Xogta lama helin - Iimaylka ama furaha sirta ah waa qalad" });
     }
 
-    const comparePassword = await bcrypt.compare(password, user.password);
+    const comparePassword = await user.comparePassword(password);
 
     if (!comparePassword) {
       return res.status(400).json({ message: "Xogta lama helin - Iimaylka ama furaha sirta ah waa qalad" });
     }
 
-    const { accessToken } = generateTokens(user._id);
+    const { accessToken } = generateTokens(user.id);
     setCookies(res, accessToken);
 
     const userData = {
-      _id: user._id,
+      id: user.id,
       username: user.username,
       email: user.email,
       role: user.role,
@@ -78,75 +92,80 @@ export const SignIn = async (req, res) => {
 
     res.status(200).json({ message: "Si guul leh ayaad u gashay", user: userData });
   } catch (error) {
-    console.error("message happening in sign in function ", error);
+    console.error("Error in SignIn function: ", error);
     res.status(500).json({ message: error.message });
   }
 };
 
-export const WhoAmI = async (req, res) => {
+export const SignOut = async (req, res) => {
   try {
-    const user = req.user;
-
-    if (!user) {
-      return res.status(401).json({ message: "Oggolaansho la'aan - Isticmaale lama helin" });
-    }
-
-    const userData = {
-      username: user.username,
-      email: user.email,
-      profilePicture: user.profilePicture,
-      _id: user._id,
-    };
-
-    res.status(200).json({ message: "Isticmaale si guul leh ayaa loo helay", user: userData });
+    res.clearCookie("accessToken");
+    res.status(200).json({ message: "Si guul leh ayaad uga baxday" });
   } catch (error) {
-    console.error("Error in WhoAmI function: ", error);
+    console.error("Error in SignOut function: ", error);
     res.status(500).json({ message: error.message });
   }
 };
 
-export const LogOut = async (req, res) => {
+export const getProfile = async (req, res) => {
   try {
-    res.clearCookie("accessToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Strict",
+    const user = await User.findByPk(req.user.id, {
+      attributes: { exclude: ['password'] }
     });
 
-    res.status(200).json({ message: "Waad ka baxday si guul leh" });
-  } catch (error) {
-    console.error("Error in LogOut function: ", error);
-    res.status(500).json({ message: error.message });
-  }
-};
-export const changePassword = async (req, res) => {
-  try {
-    const { oldPassword, newPassword } = req.body;
-
-    if (!oldPassword || !newPassword) {
-      return res.status(400).json({ message: "Fadlan geli passwordki hore iyo kan cusub" });
-    }
-
-    const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(404).json({ message: "Isticmaalaha lama helin" });
     }
 
-    const isMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Passwordkii hore waa khalad" });
+    res.status(200).json({ user });
+  } catch (error) {
+    console.error("Error in getProfile function: ", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const updateProfile = async (req, res) => {
+  try {
+    const { username, email, profilePicture } = req.body;
+    const userId = req.user.id;
+
+    let cloudinaryResponse = null;
+
+    if (profilePicture && profilePicture !== "lama keenin sawir") {
+      const uploadResponse = await cloudinary.uploader.upload(profilePicture);
+      cloudinaryResponse = uploadResponse.secure_url;
     }
 
-    // Directly assign newPassword (plain text)
-    user.password = newPassword;
+    const updateData = {};
+    if (username) updateData.username = username;
+    if (email) updateData.email = email;
+    if (cloudinaryResponse) updateData.profilePicture = cloudinaryResponse;
 
-    // This triggers your mongoose pre('save') hook which hashes and validates password
-    await user.save();
+    const [updatedCount, [updatedUser]] = await User.update(
+      updateData,
+      { 
+        where: { id: userId },
+        returning: true,
+        attributes: { exclude: ['password'] }
+      }
+    );
 
-    res.status(200).json({ message: "Erayga sirta ah si guul leh ayaa loo beddelay" });
+    if (updatedCount === 0) {
+      return res.status(404).json({ message: "Isticmaalaha lama helin" });
+    }
 
+    res.status(200).json({ 
+      message: "Macluumaadka isticmaalaha waa la cusboonaysiiyay", 
+      user: updatedUser 
+    });
   } catch (error) {
-    console.error("Error in ChangePassword function:", error);
+    console.error("Error in updateProfile function: ", error);
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({ message: "Iimaylka horey ayaa loo isticmaalay" });
+    }
     res.status(500).json({ message: error.message });
   }
 };

@@ -1,7 +1,7 @@
 import express from "express"
 import dotenv from "dotenv"
 import cors from "cors"
-import { connectDb } from "./lib/connectdb.js"
+import { connectDb } from "./lib/database.js"
 import AuthRouter from "./routes/authRoute.js"
 import TeacherRouter from "./routes/teacherRoute.js"
 import StudentsRouter from "./routes/studentsRoute.js"
@@ -40,8 +40,8 @@ app.listen(PORT , () => {
   console.log(`Server is running on port  ${PORT}`);
 
   connectDb().then(() => {
-    console.log("Connected to MongoDB successfully");
+    console.log("Connected to PostgreSQL successfully");
   }).catch(err => {
-    console.error("Failed to connect to MongoDB:", err);
+    console.error("Failed to connect to PostgreSQL:", err);
   });
 })

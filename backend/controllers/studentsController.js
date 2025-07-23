@@ -1,45 +1,60 @@
-import Student from "../models/studentsModel.js";
+import { Student, Class, Health } from "../models/index.js";
+import { Op } from 'sequelize';
 
 // 1. Abuur Arday
 export const createStudent = async (req, res) => {
   try {
     const { fullname, age, gender, classId, motherNumber, fatherNumber } = req.body;
 
-    if (!fullname || !motherNumber || !fatherNumber || !classId) {
+    if (!fullname || !motherNumber || !fatherNumber) {
       return res.status(400).json({ message: "Fadlan buuxi dhammaan meelaha looga baahan yahay" });
     }
 
-    if (age < 0) {
+    if (age && age < 0) {
       return res.status(400).json({ message: "Da'da waa khaldan tahay" });
     }
 
-    const existedFullname = await Student.findOne({ fullname });
+    const existedFullname = await Student.findOne({ where: { fullname } });
     if (existedFullname) {
       return res.status(400).json({ message: "Arday magacan leh hore ayuu u diiwaangashanaa" });
     }
 
-    const student = new Student({
+    const student = await Student.create({
       fullname,
       age,
       gender,
-      class: classId || null,
+      classId: classId || null,
       motherNumber,
       fatherNumber
     });
 
-    await student.save();
     res.status(201).json({ message: "Arday si guul leh ayaa loo abuuray", student });
   } catch (error) {
     console.error("Error in createStudent:", error);
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
     res.status(500).json({ message: error.message });
   }
 };
 
 // 2. Hel Dhammaan Ardayda
-export const getAllStudents = async (req , res) => {
+export const getAllStudents = async (req, res) => {
   try {
-    const student = await Student.find().populate("class healthRecords").sort({ createdAt: -1 });
-    res.status(200).json({ students : student });
+    const students = await Student.findAll({
+      include: [
+        {
+          model: Class,
+          as: 'class'
+        },
+        {
+          model: Health,
+          as: 'healthRecords'
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    res.status(200).json({ students });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -49,13 +64,24 @@ export const getAllStudents = async (req , res) => {
 export const getStudentById = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const student = await Student.findById(studentId).populate("class healthRecords").sort({ createdAt: -1 });
+    const student = await Student.findByPk(studentId, {
+      include: [
+        {
+          model: Class,
+          as: 'class'
+        },
+        {
+          model: Health,
+          as: 'healthRecords'
+        }
+      ]
+    });
 
     if (!student) return res.status(404).json({ message: "Arday lama helin" });
 
-    res.status(200).json({ students : student });
+    res.status(200).json({ students: student });
   } catch (error) {
-    res.status(500).json({ message:  error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -65,16 +91,21 @@ export const updateStudent = async (req, res) => {
     const { studentId } = req.params;
     const { fullname, age, gender, classId, motherNumber, fatherNumber } = req.body;
 
-    const updated = await Student.findByIdAndUpdate(
-      studentId,
-      { fullname, age, gender, class: classId, motherNumber, fatherNumber },
-      { new: true }
+    const [updatedCount, [updatedStudent]] = await Student.update(
+      { fullname, age, gender, classId, motherNumber, fatherNumber },
+      { 
+        where: { id: studentId },
+        returning: true
+      }
     );
 
-    if (!updated) return res.status(404).json({ message: "Arday lama helin" });
+    if (updatedCount === 0) return res.status(404).json({ message: "Arday lama helin" });
 
-    res.status(200).json({ message: "Macluumaadka ardayga waa la cusboonaysiiyay", student: updated });
+    res.status(200).json({ message: "Macluumaadka ardayga waa la cusboonaysiiyay", student: updatedStudent });
   } catch (error) {
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -83,9 +114,9 @@ export const updateStudent = async (req, res) => {
 export const deleteStudent = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const deleted = await Student.findByIdAndDelete(studentId);
+    const deletedCount = await Student.destroy({ where: { id: studentId } });
 
-    if (!deleted) return res.status(404).json({ message: "Arday lama helin" });
+    if (deletedCount === 0) return res.status(404).json({ message: "Arday lama helin" });
 
     res.status(200).json({ message: "Ardayga si guul leh ayaa loo tirtiray" });
   } catch (error) {
@@ -98,99 +129,118 @@ export const assignStudentToClass = async (req, res) => {
   try {
     const { studentId, classId } = req.params;
 
-    const student = await Student.findByIdAndUpdate(
-      studentId,
-      { class: classId },
-      { new: true }
+    // Check if class exists
+    const classExists = await Class.findByPk(classId);
+    if (!classExists) {
+      return res.status(404).json({ message: "Fasalka lama helin" });
+    }
+
+    const [updatedCount] = await Student.update(
+      { classId },
+      { where: { id: studentId } }
     );
 
-    res.status(200).json({ message: "Fasalka ayaa loo qoondeeyay ardayga", student });
+    if (updatedCount === 0) return res.status(404).json({ message: "Arday lama helin" });
+
+    res.status(200).json({ message: "Ardayga fasalka ayaa loo qoondayay" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// 7. Diiwaangelinta Lacagta Waxbarasho
-export const trackFeePayment = async (req, res) => {
+// 7. Ka saar Fasal Ardayga
+export const removeStudentFromClass = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const { total, paid } = req.body;
 
-    const student = await Student.findById(studentId);
-    if (!student) {
-      return res.status(404).json({ message: "Arday lama helin" });
-    }
+    const [updatedCount] = await Student.update(
+      { classId: null },
+      { where: { id: studentId } }
+    );
 
-    if (total !== undefined) student.fee.total = total;
-    if (paid !== undefined) student.fee.paid += paid;
+    if (updatedCount === 0) return res.status(404).json({ message: "Arday lama helin" });
 
-    await student.save();
-
-    res.status(200).json({ message: "Lacag bixinta waa la diiwaangeliyay", fee: student.fee });
+    res.status(200).json({ message: "Ardayga fasalka ayaa laga saaray" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// 8. Hel Xaaladda Lacagta
-export const getFeeStatus = async (req, res) => {
+// 8. Raadi Arday magaca
+export const searchStudentsByName = async (req, res) => {
   try {
-    const { studentId } = req.params;
-    const student = await Student.findById(studentId);
-
-    if (!student) {
-      return res.status(404).json({ message: "Arday lama helin" });
+    const { name } = req.query;
+    if (!name) {
+      return res.status(400).json({ message: "Magaca ardayga geli" });
     }
 
-    const { total, paid } = student.fee;
-    const balance = total - paid;
-
-    res.status(200).json({
-      feeStatus: {
-        total,
-        paid,
-        balance,
-        status: balance === 0 ? "La bixiyay" : balance < 0 ? "Lacag dheeri ah ayaa la bixiyay" : "Lacag harsan"
-      }
+    const students = await Student.findAll({
+      where: {
+        fullname: {
+          [Op.iLike]: `%${name}%`
+        }
+      },
+      include: [
+        {
+          model: Class,
+          as: 'class'
+        }
+      ],
+      order: [['fullname', 'ASC']]
     });
+
+    res.status(200).json({ students });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// 9. Cusboonaysii Xogta Lacagta
-export const updateFeeInfo = async (req, res) => {
+// 9. Hel Ardayda Fasalka
+export const getStudentsByClass = async (req, res) => {
   try {
-    const { studentId } = req.params;
-    const { total, paid } = req.body;
+    const { classId } = req.params;
 
-    const student = await Student.findById(studentId);
-    if (!student) return res.status(404).json({ message: "Arday lama helin" });
+    const students = await Student.findAll({
+      where: { classId },
+      include: [
+        {
+          model: Class,
+          as: 'class'
+        }
+      ],
+      order: [['fullname', 'ASC']]
+    });
 
-    if (total !== undefined) student.fee.total = total;
-    if (paid !== undefined) student.fee.paid = paid;
-
-    await student.save();
-
-    res.status(200).json({ message: "Xogta lacagta waa la cusboonaysiiyay", fee: student.fee });
+    res.status(200).json({ students });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// 10. Tirtir Xogta Lacagta
-export const deleteFeeInfo = async (req, res) => {
+// 10. Cusboonaysii Lacagta Ardayga
+export const updateStudentFees = async (req, res) => {
   try {
     const { studentId } = req.params;
+    const { feeTotal, feePaid } = req.body;
 
-    const student = await Student.findById(studentId);
-    if (!student) return res.status(404).json({ message: "Arday lama helin" });
+    if (feeTotal < 0 || feePaid < 0) {
+      return res.status(400).json({ message: "Lacagtu ma noqon karto tiro xun" });
+    }
 
-    student.fee = { total: 0, paid: 0 };
+    const [updatedCount, [updatedStudent]] = await Student.update(
+      { feeTotal, feePaid },
+      { 
+        where: { id: studentId },
+        returning: true
+      }
+    );
 
-    await student.save();
+    if (updatedCount === 0) return res.status(404).json({ message: "Arday lama helin" });
 
-    res.status(200).json({ message: "Xogta lacagta waa la tiray", fee: student.fee });
+    res.status(200).json({ 
+      message: "Lacagta ardayga waa la cusboonaysiiyay", 
+      student: updatedStudent 
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

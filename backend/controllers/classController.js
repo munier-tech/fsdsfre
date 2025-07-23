@@ -1,6 +1,5 @@
-import Attendance from "../models/attendanceModel.js";
-import Class from "../models/classModel.js";
-import Student from "../models/studentsModel.js";
+import { Attendance, AttendanceRecord, Class, Student } from "../models/index.js";
+import { Op } from 'sequelize';
 
 // ✅ Abuur fasal cusub
 export const createClass = async (req, res) => {
@@ -11,25 +10,39 @@ export const createClass = async (req, res) => {
       return res.status(400).json({ message: "Fadlan geli magaca fasalka iyo heerka" });
     }
 
-    const existing = await Class.findOne({ name });
+    const existing = await Class.findOne({ where: { name } });
     if (existing) {
       return res.status(409).json({ message: "Fasalka hore ayuu u diiwaangashanaa" });
     }
 
-    const newClass = new Class({ name, level });
-    await newClass.save();
+    const newClass = await Class.create({ name, level });
 
     res.status(201).json({ message: "Fasal si guul leh ayaa loo abuuray", classData: newClass });
   } catch (error) {
     console.error("createClass error:", error);
-    res.status(500).json({ message:  error.message });
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
+    res.status(500).json({ message: error.message });
   }
 };
 
 // ✅ Soo hel dhammaan fasalada
 export const getAllClasses = async (req, res) => {
   try {
-    const classes = await Class.find().populate("students attendance");
+    const classes = await Class.findAll({
+      include: [
+        {
+          model: Student,
+          as: 'students'
+        },
+        {
+          model: Attendance,
+          as: 'attendances'
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
     res.status(200).json({ classes });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -40,7 +53,14 @@ export const getAllClasses = async (req, res) => {
 export const getClassById = async (req, res) => {
   try {
     const { classId } = req.params;
-    const classData = await Class.findById(classId).populate("students");
+    const classData = await Class.findByPk(classId, {
+      include: [
+        {
+          model: Student,
+          as: 'students'
+        }
+      ]
+    });
 
     if (!classData) {
       return res.status(404).json({ message: "Fasalka lama helin" });
@@ -58,18 +78,23 @@ export const updateClass = async (req, res) => {
     const { classId } = req.params;
     const { name, level } = req.body;
 
-    const updated = await Class.findByIdAndUpdate(
-      classId,
+    const [updatedCount, [updated]] = await Class.update(
       { name, level },
-      { new: true }
+      { 
+        where: { id: classId },
+        returning: true
+      }
     );
 
-    if (!updated) {
+    if (updatedCount === 0) {
       return res.status(404).json({ message: "Fasalka lama helin" });
     }
 
     res.status(200).json({ message: "Fasalka si guul leh ayaa loo cusbooneysiiyay", classData: updated });
   } catch (error) {
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -79,8 +104,8 @@ export const deleteClass = async (req, res) => {
   try {
     const { classId } = req.params;
 
-    const deleted = await Class.findByIdAndDelete(classId);
-    if (!deleted) {
+    const deletedCount = await Class.destroy({ where: { id: classId } });
+    if (deletedCount === 0) {
       return res.status(404).json({ message: "Fasalka lama helin" });
     }
 
@@ -95,22 +120,20 @@ export const assignStudentToClass = async (req, res) => {
   const { classId, studentId } = req.params;
 
   try {
-    const foundClass = await Class.findById(classId);
-    const student = await Student.findById(studentId);
+    const foundClass = await Class.findByPk(classId);
+    const student = await Student.findByPk(studentId);
 
     if (!foundClass || !student) {
       return res.status(404).json({ message: "Fasalka ama ardayga lama helin" });
     }
 
-    if (foundClass.students.some(id => id.toString() === studentId)) {
+    // Check if student is already in this class
+    if (student.classId === parseInt(classId)) {
       return res.status(400).json({ message: "Ardayga horey ayaa fasalka loogu daray" });
     }
 
-    foundClass.students.push(studentId);
-    await foundClass.save();
-
-    student.class = classId;
-    await student.save();
+    // Update student's class
+    await student.update({ classId });
 
     res.status(200).json({ message: "Ardayga si guul leh ayaa fasalka loogu daray" });
   } catch (error) {
@@ -119,75 +142,108 @@ export const assignStudentToClass = async (req, res) => {
   }
 };
 
-// ✅ Ka saar arday fasalka
+// ✅ Ka saar arday fasal
 export const removeStudentFromClass = async (req, res) => {
+  const { classId, studentId } = req.params;
+
   try {
-    const { classId, studentId } = req.params;
+    const student = await Student.findByPk(studentId);
 
-    const foundClass = await Class.findById(classId);
-    const foundStudent = await Student.findById(studentId);
-
-    if (!foundClass || !foundStudent) {
-      return res.status(404).json({ message: "Fasalka ama ardayga lama helin" });
+    if (!student) {
+      return res.status(404).json({ message: "Ardayga lama helin" });
     }
 
-    await foundClass.students.pull(studentId);
-    await foundClass.save();
+    if (student.classId !== parseInt(classId)) {
+      return res.status(400).json({ message: "Ardayga fasalka ma joogo" });
+    }
 
-    foundStudent.class = null;
+    await student.update({ classId: null });
 
-    res.status(200).json({ message: "Ardayga si guul leh ayaa laga saaray fasalka" });
+    res.status(200).json({ message: "Ardayga si guul leh ayaa fasalka looga saaray" });
   } catch (error) {
     console.error("Error removing student:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// ✅ Soo hel xaadiris fasal
-export const getClassAttendance = async (req, res) => {
-  try {
-    const { classId } = req.params;
-
-    const foundClass = await Class.findById(classId).populate({
-      path: "attendance",
-      populate: {
-        path: "students.student",
-        model: "Student",
-        select: "fullname age gender"
-      }
-    });
-
-    if (!foundClass) {
-      return res.status(404).json({ message: "Fasalka lama helin" });
-    }
-
-    res.status(200).json({
-      message: "Xaadiriska fasalka si guul leh ayaa loo helay",
-      attendance: foundClass.attendance,
-    });
-  } catch (error) {
-    console.error("Error fetching class attendance:", error);
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ✅ Soo hel ardayda fasalka
+// ✅ Hel ardayda fasalka
 export const getClassStudents = async (req, res) => {
   try {
     const { classId } = req.params;
 
-    const classData = await Class.findById(classId).populate({
-      path: "students",
-      select: "fullname age gender"
+    const students = await Student.findAll({
+      where: { classId },
+      order: [['fullname', 'ASC']]
+    });
+
+    res.status(200).json({ students });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ✅ Raadi fasalo magaca
+export const searchClassesByName = async (req, res) => {
+  try {
+    const { name } = req.query;
+    
+    if (!name) {
+      return res.status(400).json({ message: "Magaca fasalka geli" });
+    }
+
+    const classes = await Class.findAll({
+      where: {
+        name: {
+          [Op.iLike]: `%${name}%`
+        }
+      },
+      include: [
+        {
+          model: Student,
+          as: 'students'
+        }
+      ],
+      order: [['name', 'ASC']]
+    });
+
+    res.status(200).json({ classes });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ✅ Hel tirada ardayda fasalka
+export const getClassStatistics = async (req, res) => {
+  try {
+    const { classId } = req.params;
+
+    const classData = await Class.findByPk(classId, {
+      include: [
+        {
+          model: Student,
+          as: 'students'
+        }
+      ]
     });
 
     if (!classData) {
       return res.status(404).json({ message: "Fasalka lama helin" });
     }
 
-    res.status(200).json({ students: classData.students });
+    const totalStudents = classData.students.length;
+    const maleStudents = classData.students.filter(s => s.gender === 'male').length;
+    const femaleStudents = classData.students.filter(s => s.gender === 'female').length;
+
+    res.status(200).json({
+      statistics: {
+        className: classData.name,
+        level: classData.level,
+        totalStudents,
+        maleStudents,
+        femaleStudents
+      }
+    });
   } catch (error) {
-    console.error("Error fetching class students:", error);
     res.status(500).json({ message: error.message });
   }
 };
