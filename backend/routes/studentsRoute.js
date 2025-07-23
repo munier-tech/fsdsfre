@@ -11,23 +11,24 @@ import {
   updateFeeInfo,
   deleteFeeInfo
 } from "../controllers/studentsController.js";
+import { protectedRoute } from "../middlewares/authorization.js";
 
 const router = express.Router();
 
 // Core student routes
-router.post("/create", createStudent);
-router.get("/getAll", getAllStudents);
-router.get("/getId/:studentId", getStudentById);
-router.put("/update/:studentId", updateStudent);
-router.delete("/delete/:studentId", deleteStudent);
+router.post("/create", protectedRoute ,  createStudent);
+router.get("/getAll", protectedRoute ,  getAllStudents);
+router.get("/getId/:studentId", protectedRoute ,  getStudentById);
+router.put("/update/:studentId", protectedRoute ,  updateStudent);
+router.delete("/delete/:studentId", protectedRoute ,  deleteStudent);
 
 // Class assignment
-router.post("/:studentId/:classId", assignStudentToClass);
+router.post("/:studentId/:classId", protectedRoute ,  assignStudentToClass);
 
 // Fee management (🟡 made consistent by placing studentId at end)
-router.patch("/track-fee/:studentId", trackFeePayment);      
-router.get("/fee-status/:studentId", getFeeStatus);          
-router.patch("/update-fee/:studentId", updateFeeInfo);       
-router.delete("/reset-fee/:studentId", deleteFeeInfo);       
+router.patch("/track-fee/:studentId", protectedRoute ,  trackFeePayment);      
+router.get("/fee-status/:studentId", protectedRoute ,  getFeeStatus);          
+router.patch("/update-fee/:studentId", protectedRoute ,  updateFeeInfo);       
+router.delete("/reset-fee/:studentId", protectedRoute ,  deleteFeeInfo);       
 
 export default router;

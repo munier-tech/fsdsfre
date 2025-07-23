@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   Menu,
@@ -15,6 +15,8 @@ import {
   ChevronDown,
   Bell,
   UserCog,
+  MessageSquare,
+  HelpCircle,
 } from 'lucide-react'
 import { Transition } from '@headlessui/react'
 import useAuthStore from '../store/authStore'
@@ -33,10 +35,23 @@ const menuItems = [
 function DashboardLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024)
   
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuthStore()
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024)
+      if (window.innerWidth >= 1024) {
+        setSidebarOpen(false)
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const handleLogout = async () => {
     await logout()
@@ -55,20 +70,20 @@ function DashboardLayout({ children }) {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center justify-center h-16 px-4 bg-primary-800">
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-            <span className="text-primary-800 font-bold text-sm">A</span>
+      <div className="flex items-center justify-center h-20 px-4 bg-gradient-to-r from-primary-700 to-primary-600">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md">
+            <span className="text-primary-800 font-bold text-lg">AQ</span>
           </div>
-          <span className="text-white font-semibold text-lg">Al-Qayim</span>
+          <span className="text-white  text-black font-bold text-xl">Al-Qayim</span>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 space-y-2">
+      <nav className="flex-1 px-2 py-6 space-y-1 overflow-y-auto">
         {filteredMenuItems.map((item) => {
           const Icon = item.icon
-          const isActive = location.pathname === item.path
+          const isActive = location.pathname.startsWith(item.path)
           
           return (
             <button
@@ -79,27 +94,53 @@ function DashboardLayout({ children }) {
               }}
               className={`w-full flex items-center px-4 py-3 text-left rounded-lg transition-all duration-200 ${
                 isActive
-                  ? 'bg-primary-100 text-primary-800 border-r-4 border-primary-600'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  ? 'bg-primary-50 text-primary-800 font-semibold border-l-4 border-primary-600'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
               }`}
             >
-              <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
-              <span className="font-medium">{item.text}</span>
+              <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-primary-600' : 'text-gray-500'}`} />
+              <span className="text-sm">{item.text}</span>
+              {isActive && (
+                <span className="ml-auto w-2 h-2 bg-primary-600 rounded-full"></span>
+              )}
             </button>
           )
         })}
       </nav>
 
-      {/* User Info */}
-      <div className="p-4 border-t border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
-            <User className="w-5 h-5 text-white" />
+      {/* User Info and Help Section */}
+      <div className="p-4 border-t border-gray-100 bg-gray-50">
+        <div className="mb-4 space-y-2">
+          <button 
+            className="flex items-center w-full p-2 text-gray-600 hover:text-primary-600 hover:bg-gray-100 rounded-lg transition-colors"
+            onClick={() => navigate('/help')}
+          >
+            <HelpCircle className="w-5 h-5 mr-3" />
+            <span className="text-sm">Help & Support</span>
+          </button>
+          <button 
+            className="flex items-center w-full p-2 text-gray-600 hover:text-primary-600 hover:bg-gray-100 rounded-lg transition-colors"
+            onClick={() => navigate('/feedback')}
+          >
+            <MessageSquare className="w-5 h-5 mr-3" />
+            <span className="text-sm">Send Feedback</span>
+          </button>
+        </div>
+        
+        <div className="flex items-center space-x-3 p-2 bg-white rounded-lg shadow-xs">
+          <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center text-white">
+            {user?.username?.charAt(0).toUpperCase() || <User className="w-5 h-5" />}
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-gray-900">{user?.username}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">{user?.username}</p>
             <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
           </div>
+          <button 
+            onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+            className="p-1 text-gray-400 hover:text-gray-500 rounded-full"
+          >
+            <ChevronDown className={`w-5 h-5 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
         </div>
       </div>
     </div>
@@ -109,25 +150,26 @@ function DashboardLayout({ children }) {
     <div className="h-screen flex bg-gray-50">
       {/* Mobile sidebar overlay */}
       <Transition
-        show={sidebarOpen}
-        enter="transition-opacity ease-linear duration-300"
+        show={sidebarOpen && isMobile}
+        enter="transition-opacity ease-linear duration-200"
         enterFrom="opacity-0"
         enterTo="opacity-100"
-        leave="transition-opacity ease-linear duration-300"
+        leave="transition-opacity ease-linear duration-200"
         leaveFrom="opacity-100"
         leaveTo="opacity-0"
       >
         <div className="fixed inset-0 z-40 lg:hidden">
           <div
-            className="fixed inset-0 bg-gray-600 bg-opacity-75"
+            className="fixed inset-0 bg-gray-900 bg-opacity-50 backdrop-blur-sm"
             onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
           />
         </div>
       </Transition>
 
       {/* Mobile sidebar */}
       <Transition
-        show={sidebarOpen}
+        show={sidebarOpen && isMobile}
         enter="transition ease-in-out duration-300 transform"
         enterFrom="-translate-x-full"
         enterTo="translate-x-0"
@@ -135,11 +177,12 @@ function DashboardLayout({ children }) {
         leaveFrom="translate-x-0"
         leaveTo="-translate-x-full"
       >
-        <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl lg:hidden">
+        <div className="fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-xl lg:hidden">
           <div className="absolute top-0 right-0 -mr-12 pt-2">
             <button
               className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
               onClick={() => setSidebarOpen(false)}
+              aria-label="Close sidebar"
             >
               <X className="h-6 w-6 text-white" />
             </button>
@@ -150,7 +193,7 @@ function DashboardLayout({ children }) {
 
       {/* Desktop sidebar */}
       <div className="hidden lg:flex lg:flex-shrink-0">
-        <div className="flex flex-col w-64 bg-white border-r border-gray-200">
+        <div className="flex flex-col w-64 bg-white border-r border-gray-200 shadow-sm">
           <SidebarContent />
         </div>
       </div>
@@ -158,40 +201,47 @@ function DashboardLayout({ children }) {
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        <header className="bg-white shadow-xs border-b border-gray-100">
           <div className="flex items-center justify-between px-6 py-4">
             <div className="flex items-center">
               <button
-                className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+                className="lg:hidden p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 onClick={() => setSidebarOpen(true)}
+                aria-label="Open sidebar"
               >
                 <Menu className="h-6 w-6" />
               </button>
-              <h1 className="ml-4 lg:ml-0 text-2xl font-semibold text-gray-900">
-                Al-Qayim Management System
+              <h1 className="ml-3 text-xl font-semibold text-gray-800">
+                {menuItems.find(item => location.pathname.startsWith(item.path))?.text || 'Dashboard'}
               </h1>
             </div>
 
             <div className="flex items-center space-x-4">
               {/* Notifications */}
-              <button className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-full">
-                <Bell className="h-6 w-6" />
+              <button 
+                className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                aria-label="Notifications"
+              >
+                <Bell className="h-5 w-5" />
+                <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
               </button>
 
               {/* Profile dropdown */}
               <div className="relative">
                 <button
-                  className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="flex items-center space-x-3 p-1 rounded-lg hover:bg-gray-50 transition-colors"
                   onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                  aria-expanded={profileDropdownOpen}
+                  aria-haspopup="true"
                 >
-                  <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
-                    <User className="w-4 h-4 text-white" />
+                  <div className="w-9 h-9 bg-blue-200 text-black to-primary-600 rounded-full flex items-center justify-center text-sm font-bold">
+                    {user?.username?.charAt(0).toUpperCase()}
                   </div>
                   <div className="hidden md:block text-left">
-                    <p className="text-sm font-medium text-gray-900">{user?.username}</p>
+                    <p className="text-sm font-medium text-gray-800">{user?.username}</p>
                     <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
                   </div>
-                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Dropdown menu */}
@@ -204,24 +254,45 @@ function DashboardLayout({ children }) {
                   leaveFrom="transform opacity-100 scale-100"
                   leaveTo="transform opacity-0 scale-95"
                 >
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-                    <button
-                      onClick={() => {
-                        navigate('/profile')
-                        setProfileDropdownOpen(false)
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
-                    >
-                      <User className="w-4 h-4 mr-3" />
-                      Profile
-                    </button>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
-                    >
-                      <LogOut className="w-4 h-4 mr-3" />
-                      Logout
-                    </button>
+                  <div 
+                    className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-10"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <p className="text-sm font-medium text-gray-900">{user?.username}</p>
+                      <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                    </div>
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          navigate('/profile')
+                          setProfileDropdownOpen(false)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                      >
+                        <User className="w-4 h-4 mr-3 text-gray-500" />
+                        My Profile
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigate('/settings')
+                          setProfileDropdownOpen(false)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                      >
+                        <Settings className="w-4 h-4 mr-3 text-gray-500" />
+                        Settings
+                      </button>
+                    </div>
+                    <div className="py-1 border-t border-gray-100">
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                      >
+                        <LogOut className="w-4 h-4 mr-3 text-gray-500" />
+                        Sign out
+                      </button>
+                    </div>
                   </div>
                 </Transition>
               </div>
@@ -230,9 +301,17 @@ function DashboardLayout({ children }) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-7xl mx-auto">
-            {children}
+        <main className="flex-1 overflow-y-auto focus:outline-none">
+          <div className="mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="bg-white rounded-xl shadow-xs p-6 mb-6">
+              {children}
+            </div>
+            
+            {/* Footer */}
+            <footer className="mt-8 text-center text-sm text-gray-500">
+              <p>Al-Qayim Management System © {new Date().getFullYear()}</p>
+              <p className="mt-1">Version 1.0.0</p>
+            </footer>
           </div>
         </main>
       </div>

@@ -5,7 +5,7 @@ export const AddFinance = async ( req, res ) => {
 
     const { income , expenese , debt  , date } = req.body;
 
-    if (!income || !expenese || !debt) {
+    if (!income || !expenese || !debt || !date) {
       return res.status(400).json({ message: "Fadlan buuxi dhammaan meelaha banan" });
     }
 
@@ -15,7 +15,8 @@ export const AddFinance = async ( req, res ) => {
     const finance = new Finance({
       income,
       expenese,
-      debt
+      debt,
+      date: date ? new Date(date) : new Date()
     });
 
 

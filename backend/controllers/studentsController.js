@@ -38,7 +38,7 @@ export const createStudent = async (req, res) => {
 // 2. Hel Dhammaan Ardayda
 export const getAllStudents = async (req , res) => {
   try {
-    const student = await Student.find().populate("class").sort({ createdAt: -1 });
+    const student = await Student.find().populate("class healthRecords").sort({ createdAt: -1 });
     res.status(200).json({ students : student });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -49,7 +49,7 @@ export const getAllStudents = async (req , res) => {
 export const getStudentById = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const student = await Student.findById(studentId).populate("class").sort({ createdAt: -1 });
+    const student = await Student.findById(studentId).populate("class healthRecords").sort({ createdAt: -1 });
 
     if (!student) return res.status(404).json({ message: "Arday lama helin" });
 

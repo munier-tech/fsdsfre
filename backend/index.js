@@ -7,6 +7,7 @@ import TeacherRouter from "./routes/teacherRoute.js"
 import StudentsRouter from "./routes/studentsRoute.js"
 import attendanceRouter from "./routes/attendanceRoute.js"
 import classRouter from "./routes/classRoute.js"
+import healthRouter from "./routes/healthRouter.js"
 import cookieParser from "cookie-parser";
 dotenv.config()
 const app = express()
@@ -29,6 +30,7 @@ app.use("/api/teachers", TeacherRouter);
 app.use("/api/students", StudentsRouter);
 app.use("/api/classes", classRouter);
 app.use("/api/attendance", attendanceRouter);
+  app.use("/api/health", healthRouter);
 
 
 

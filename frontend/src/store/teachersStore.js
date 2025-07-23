@@ -15,7 +15,7 @@ const useTeachersStore = create((set, get) => ({
   fetchTeachers: async () => {
     set({ loading: true })
     try {
-      const response = await axios.get('/teachers/getAll')
+      const response = await axios.get('/teachers/get')
       set({ 
         teachers: response.data.teachers || [],
         loading: false 

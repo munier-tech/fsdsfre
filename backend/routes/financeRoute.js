@@ -4,11 +4,12 @@ import {
   getAllFinance,
   getFinanceById,
 } from "../controllers/financeController.js";
+import { protectedRoute } from "../middlewares/authorization.js";
 
 const router = express.Router();
 
-router.post("/create", AddFinance);
-router.get("/getAll", getAllFinance);
-router.get("/get/:financeId", getFinanceById);
+router.post("/create", protectedRoute, AddFinance);
+router.get("/getAll", protectedRoute, getAllFinance);
+router.get("/get/:financeId", protectedRoute, getFinanceById);
 
 export default router;
